@@ -17,6 +17,34 @@ RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
 BUILD_URL="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 export RELEASE_URL BUILD_URL
 
+verify_tag() {
+  python3 - "$TAG" <<'PY'
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/commits/{sys.argv[1]}"
+request = urllib.request.Request(url, headers={
+    'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'DesktopMemo-release',
+})
+try:
+    with urllib.request.urlopen(request, timeout=30) as response:
+        commit = json.load(response)['sha']
+except urllib.error.HTTPError as error:
+    if error.code == 404:
+        sys.exit(0)
+    raise SystemExit(f'Cannot verify release tag: HTTP {error.code}')
+if commit != os.environ['GITHUB_SHA']:
+    raise SystemExit('Version tag already points to another commit. Bump VERSION; never move a published tag.')
+PY
+}
+
+verify_tag
+
 for arch in arm64 x86_64; do
   test -s "release-assets/DesktopMemo-macOS-$arch.zip"
   test -s "release-assets/DesktopMemo-macOS-$arch.dmg"
@@ -34,7 +62,7 @@ notes = '\n'.join(line for line in notes.splitlines()
                   if not line.startswith('**发布准备状态：')
                   and not line.startswith('下载页：'))
 proof = (f"\n\n构建记录：{os.environ['BUILD_URL']}\n\n"
-         f"Apple 芯片与 Intel 云端构建、时间规划单元测试、签名完整性和安装包校验均通过。"
+         f"Apple 芯片与 Intel 云端构建、时间规划与本地保存单元测试、应用启动检查、签名完整性和安装包校验均通过。"
          f"UI、系统通知和登录启动仍需实际使用验证。\n\n"
          f"源码提交：`{os.environ['GITHUB_SHA']}`\n\n"
          f"下载页：{os.environ['RELEASE_URL']}\n")
@@ -60,6 +88,7 @@ fi
 
 gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" \
   release-assets/*.zip release-assets/*.dmg release-assets/*-SHA256SUMS.txt --clobber
+verify_tag
 gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
   --notes-file release-assets/RELEASE_NOTES.md --draft=false --prerelease=true --latest=false
 printf 'Beta release: %s\n' "$RELEASE_URL"

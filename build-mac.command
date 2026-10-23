@@ -8,11 +8,17 @@ for argument in "$@"; do
     -h|--help)
       echo "Usage: bash build-mac.command [--no-open]"
       echo "Test and package a native-architecture macOS beta (ad hoc signed, not notarized)."
+      echo "Set SMOKE_TEST=1 on a disposable macOS CI runner to check app startup for 8 seconds."
       exit 0
       ;;
     *) echo "Unknown argument: $argument" >&2; exit 2 ;;
   esac
 done
+
+case "${SMOKE_TEST:-0}" in
+  0|1) ;;
+  *) echo "SMOKE_TEST must be 0 or 1" >&2; exit 2 ;;
+esac
 
 cd "$(dirname "$0")"
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -34,7 +40,24 @@ PACKAGE_NAME="DesktopMemo-macOS-$ARCH"
 mkdir -p dist
 DIST="$(cd dist && pwd -P)"
 STAGING="$(mktemp -d "$DIST/.package.XXXXXX")"
+SMOKE_PID=""
+stop_smoke() {
+  if [[ -n "$SMOKE_PID" ]]; then
+    # Only signal the child launched by this invocation, never other app instances.
+    kill "$SMOKE_PID" 2>/dev/null || true
+    for attempt in 1 2 3 4 5; do
+      if ! kill -0 "$SMOKE_PID" 2>/dev/null; then break; fi
+      sleep 1
+    done
+    if kill -0 "$SMOKE_PID" 2>/dev/null; then
+      kill -KILL "$SMOKE_PID" 2>/dev/null || true
+    fi
+    wait "$SMOKE_PID" 2>/dev/null || true
+    SMOKE_PID=""
+  fi
+}
 cleanup() {
+  stop_smoke
   # Only remove the fresh private staging directory created by this invocation.
   case "$STAGING" in
     "$DIST"/.package.??????) rm -rf -- "$STAGING" ;;
@@ -42,6 +65,8 @@ cleanup() {
   esac
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "正在验证并构建桌面备忘 Beta（$ARCH）…"
 xcrun swift test -c release --arch "$ARCH"
@@ -56,6 +81,27 @@ chmod +x "$APP/Contents/MacOS/DesktopMemo"
 plutil -lint "$APP/Contents/Info.plist"
 codesign --force --sign - --identifier com.desktopmemo.local "$APP"
 codesign --verify --strict --verbose=2 "$APP"
+
+if [[ "${SMOKE_TEST:-0}" -eq 1 ]]; then
+  SMOKE_LOG="$DIST/startup-$ARCH.log"
+  echo "检查已签名应用能否持续运行 8 秒（不会操作通知权限）…"
+  "$APP/Contents/MacOS/DesktopMemo" > "$SMOKE_LOG" 2>&1 &
+  SMOKE_PID=$!
+  sleep 8
+  if ! kill -0 "$SMOKE_PID" 2>/dev/null; then
+    if wait "$SMOKE_PID"; then
+      SMOKE_STATUS=0
+    else
+      SMOKE_STATUS=$?
+    fi
+    SMOKE_PID=""
+    echo "Startup smoke test failed: app exited before 8 seconds (status $SMOKE_STATUS)." >&2
+    tail -n 80 "$SMOKE_LOG" >&2
+    exit 1
+  fi
+  stop_smoke
+  echo "Startup smoke test passed: app remained alive for 8 seconds." | tee -a "$SMOKE_LOG"
+fi
 
 cat > "$STAGING/README-Beta.txt" <<EOF
 桌面备忘 / DesktopMemo — 0.1.0 Beta

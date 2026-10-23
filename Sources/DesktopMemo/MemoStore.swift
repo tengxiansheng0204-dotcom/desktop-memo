@@ -9,10 +9,14 @@ final class MemoStore: ObservableObject {
     var onChange: (() -> Void)?
     private let fileURL: URL
 
-    init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        fileURL = support.appendingPathComponent("DesktopMemo", isDirectory: true)
-            .appendingPathComponent("memos.json")
+    init(fileURL customFileURL: URL? = nil) {
+        if let customFileURL {
+            fileURL = customFileURL
+        } else {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            fileURL = support.appendingPathComponent("DesktopMemo", isDirectory: true)
+                .appendingPathComponent("memos.json")
+        }
         do {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 let loaded = try JSONDecoder().decode([Memo].self, from: Data(contentsOf: fileURL))
