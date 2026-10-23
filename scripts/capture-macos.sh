@@ -4,8 +4,14 @@ mkdir -p screenshot-output screenshot-work
 sw_vers > screenshot-output/environment.txt
 uname -m >> screenshot-output/environment.txt
 printf '%s\n' 'Released app: v0.1.0-beta.1 (154e51800754e071510203757cc6bb77e5b9c234)' 'Data: demonstration memos created on an ephemeral macOS runner.' >> screenshot-output/environment.txt
-curl --fail --location --retry 3 'https://github.com/tengxiansheng0204-dotcom/desktop-memo/releases/download/v0.1.0-beta.1/DesktopMemo-macOS-arm64.zip' -o screenshot-work/app.zip
-printf '%s\n' '561dbd43e8c6166d37189fcf053eab43dd6719e3187c37382da182632aef3f14  screenshot-work/app.zip' | shasum -a 256 -c -
+ARCH=$(uname -m)
+case "$ARCH" in
+  arm64) APP_SHA256='561dbd43e8c6166d37189fcf053eab43dd6719e3187c37382da182632aef3f14' ;;
+  x86_64) APP_SHA256='166cbd45118c24c605519aad0c43da5cdbe4ab19e9da2bf3e44e5828b9175dc2' ;;
+  *) echo 'Unsupported capture architecture' >&2; exit 1 ;;
+esac
+curl --fail --location --retry 3 "https://github.com/tengxiansheng0204-dotcom/desktop-memo/releases/download/v0.1.0-beta.1/DesktopMemo-macOS-${ARCH}.zip" -o screenshot-work/app.zip
+printf '%s  %s\n' "$APP_SHA256" 'screenshot-work/app.zip' | shasum -a 256 -c -
 ditto -x -k screenshot-work/app.zip screenshot-work
 APP="$PWD/screenshot-work/DesktopMemo.app"
 codesign --verify --deep --strict "$APP"
