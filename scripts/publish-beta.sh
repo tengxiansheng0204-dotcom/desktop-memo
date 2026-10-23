@@ -25,19 +25,25 @@ import sys
 import urllib.error
 import urllib.request
 
-url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/commits/{sys.argv[1]}"
-request = urllib.request.Request(url, headers={
+base = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
+headers = {
     'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
     'Accept': 'application/vnd.github+json',
     'User-Agent': 'DesktopMemo-release',
-})
-try:
+}
+def fetch(path):
+    request = urllib.request.Request(base + path, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
-        commit = json.load(response)['sha']
+        return json.load(response)
+
+# Missing refs have a reliable 404; /commits/<missing-tag> can instead return 422.
+try:
+    fetch('/git/ref/tags/' + sys.argv[1])
 except urllib.error.HTTPError as error:
     if error.code == 404:
         sys.exit(0)
     raise SystemExit(f'Cannot verify release tag: HTTP {error.code}')
+commit = fetch('/commits/' + sys.argv[1])['sha']
 if commit != os.environ['GITHUB_SHA']:
     raise SystemExit('Version tag already points to another commit. Bump VERSION; never move a published tag.')
 PY
