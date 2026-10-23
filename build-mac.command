@@ -64,11 +64,11 @@ cleanup() {
     *) echo "Refusing to remove unexpected staging path: $STAGING" >&2 ;;
   esac
 }
-trap cleanup EXIT
+trap 'exit_status=$?; cleanup; exit "$exit_status"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-echo "正在验证并构建桌面备忘 Beta（$ARCH）…"
+echo "正在验证并构建桌面备忘 Beta（${ARCH}）…"
 xcrun swift test -c release --arch "$ARCH"
 xcrun swift build -c release --arch "$ARCH"
 BIN_DIR="$(xcrun swift build -c release --arch "$ARCH" --show-bin-path)"
