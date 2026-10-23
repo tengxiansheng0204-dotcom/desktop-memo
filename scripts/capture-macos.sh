@@ -33,13 +33,28 @@ cleanup() {
   fi
 }
 trap 'exit_status=$?; cleanup; exit "$exit_status"' EXIT
-for appearance in Light Dark; do
+# Show the real macOS desktop and Dock on this disposable runner.
+defaults write com.apple.dock autohide -bool false
+killall Dock 2>/dev/null || true
+osascript <<'APPLESCRIPT' > screenshot-output/desktop-setup.log 2>&1 || true
+with timeout of 8 seconds
+    tell application "Finder"
+        activate
+        close every window
+    end tell
+end timeout
+APPLESCRIPT
+sleep 3
+for appearance in Light; do
   "$APP/Contents/MacOS/DesktopMemo" -AppleLanguages '(zh-Hans)' -AppleLocale zh_CN -AppleInterfaceStyle "$appearance" > "screenshot-output/startup-${appearance}.log" 2>&1 &
   APP_PID=$!
   sleep 6
   kill -0 "$APP_PID"
   WINDOW_ID=$(swift scripts/window-id.swift "$APP_PID" 2> "screenshot-output/window-${appearance}.log")
   /usr/sbin/screencapture -x -o -l "$WINDOW_ID" "screenshot-output/DesktopMemo-macOS-${appearance}.png"
+  /usr/sbin/screencapture -x -D 1 "screenshot-output/DesktopMemo-macOS-Desktop.png"
+  test -s "screenshot-output/DesktopMemo-macOS-Desktop.png"
+  sips -g pixelWidth -g pixelHeight "screenshot-output/DesktopMemo-macOS-Desktop.png"
   test -s "screenshot-output/DesktopMemo-macOS-${appearance}.png"
   sips -g pixelWidth -g pixelHeight "screenshot-output/DesktopMemo-macOS-${appearance}.png"
   cleanup
