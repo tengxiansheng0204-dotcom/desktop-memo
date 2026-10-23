@@ -107,7 +107,7 @@ cat > "$STAGING/README-Beta.txt" <<EOF
 桌面备忘 / DesktopMemo — 0.1.0 Beta
 
 适用系统：macOS 13 或更新版本
-处理器架构：$ARCH（arm64 = Apple 芯片；x86_64 = Intel）
+处理器架构：${ARCH}（arm64 = Apple 芯片；x86_64 = Intel）
 
 安装：将 DesktopMemo.app 拖入“应用程序”，然后打开。
 首次启动请允许系统通知。关闭备忘窗口后，应用仍在菜单栏运行。
